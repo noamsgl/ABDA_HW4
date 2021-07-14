@@ -131,3 +131,6 @@ dmypy.json
 # IDEs
 .idea
 .vscode
+
+# my ignored files
+/ignore/
