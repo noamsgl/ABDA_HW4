@@ -1,0 +1,15 @@
+{
+	"folders": [
+		{
+			"name": "ABDA_HW4",
+			"path": "."
+		}
+	],
+	"settings": {
+		"python.pythonPath": "c:\\Users\\noam\\Envs\\ds\\Scripts\\python.exe",
+		"jupyter.jupyterServerType": "local",
+		"[python]": {
+			"editor.wordBasedSuggestions": false
+		}
+	}
+}
