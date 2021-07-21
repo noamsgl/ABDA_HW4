@@ -13,6 +13,7 @@ from pyro import poutine
 from pyro.contrib.autoguide import AutoDelta
 from pyro.infer import SVI, TraceEnum_ELBO, config_enumerate, MCMC, NUTS, predictive
 from pyro.infer import Predictive
+from sklearn.manifold import TSNE, MDS
 
 
 @config_enumerate(default='parallel')
@@ -20,8 +21,8 @@ from pyro.infer import Predictive
 def model(data):
     # Global variables.
     weights = pyro.param('weights', torch.ones(K) / K, constraint=constraints.simplex)
-    scales = pyro.param('scales', torch.tensor([[[1., 0.], [0., 2.]], [[3., 0.], [0., 4.]], [[5., 0.], [0., 6.]]]), constraint=constraints.positive)
-    locs = pyro.param('locs', torch.tensor([[1., 2.], [3., 4.], [5., 6.]]))
+    scales = pyro.param('scales', torch.rand(K, 2, 2) * torch.eye(2).expand(K, 2, 2), constraint=constraints.positive)
+    locs = pyro.param('locs', torch.rand((K, 2)))
 
     with pyro.iarange('data', data.size(0)):
         # Local variables.
@@ -71,6 +72,9 @@ def get_samples():
 
     mu2 = torch.tensor([5., 0.])
     sig2 = torch.tensor([[4., 0.], [0., 1.]])
+    
+    mu3 = torch.tensor([8., 8.])
+    sig3 = torch.tensor([[2., 0.], [0., 1.]])
 
     # generate samples
     dist1 = dist.MultivariateNormal(mu1, sig1)
@@ -79,7 +83,10 @@ def get_samples():
     dist2 = dist.MultivariateNormal(mu2, sig2)
     samples2 = [pyro.sample('samples2', dist2) for _ in range(num_samples)]
 
-    data = torch.cat((torch.stack(samples1), torch.stack(samples2)))
+    dist3 = dist.MultivariateNormal(mu3, sig3)
+    samples3 = [pyro.sample('samples3', dist3) for _ in range(num_samples)]
+
+    data = torch.cat((torch.stack(samples1), torch.stack(samples2), torch.stack(samples3)))
     return data
 
 
@@ -118,21 +125,27 @@ def plot(data, mus=None, sigmas=None, colors='black', figname='fig.png'):
 
 if __name__ == "__main__":
     pyro.enable_validation(True)
-    pyro.set_rng_seed(42)
 
     # Create our model with a fixed number of components
     K = 3
+    pyro.set_rng_seed(42)
 
     data = get_samples()
+
+    true_colors = [0] * 100 + [1] * 100 + [2] * 100
+    # plot(data, colors=true_colors, figname='pyro_init.png')
+
+    X_embedded = TSNE(n_components=2, init='pca', random_state=0).fit_transform(data)
+    plt.scatter(X_embedded[:, 0], X_embedded[:, 1], c=true_colors)
+    plt.savefig('outputs/data-tsne.png')
+
+
 
     global_guide = AutoDelta(poutine.block(model, expose=['weights', 'locs', 'scales']))
     global_guide = config_enumerate(global_guide, 'parallel')
     _, svi = initialize(data)
 
-    true_colors = [0] * 100 + [1] * 100
-    plot(data, colors=true_colors, figname='pyro_init.png')
-
-    for i in range(2551):
+    for i in range(1001):
         svi.step(data)
 
         if i % 50 == 0:
@@ -147,8 +160,8 @@ if __name__ == "__main__":
             print('assignments: {}'.format(assignment_probs))
 
             # todo plot data and estimates
-            assignments = np.uint8(np.round(assignment_probs.data))
-            plot(data, locs.data, scales.data, assignments, figname='pyro_iteration{}.png'.format(i))
+            assignments = np.uint8(torch.argmax(assignment_probs, dim=1))
+            plot(data, locs.data, scales.data, assignments, figname='outputs/pyro_iteration{}.png'.format(i))
 
 
     # nuts_kernel = NUTS(model, adapt_step_size=True)
